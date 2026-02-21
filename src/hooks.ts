@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import TwoTS from 'twojs-ts';
-declare class Two extends TwoTS {}
+import Two from 'two.js';
 
 export const useTwo = <T extends HTMLElement>(
   elRef: React.RefObject<T>,
@@ -17,6 +16,7 @@ export const useTwo = <T extends HTMLElement>(
     twoRef.current = new Two({
       width: el.clientWidth,
       height: el.clientHeight,
+      fitted: true,
       // autostart: false,
     });
     twoRef.current.appendTo(el);

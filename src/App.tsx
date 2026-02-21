@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import './App.css';
 import { leastSquares } from './leastSquares';
+import { drawKeyColumn } from './layout';
 import { PopupState, usePopupState, useTwo } from './hooks';
 import {
   Point2D,
@@ -102,10 +103,12 @@ type Pos = { x: number; y: number };
 const Boo = ({
   data,
   ppm,
+  keyCount,
   showAuxiliaryLines,
 }: {
   data: Record<Column, Pos[]>;
   ppm: number;
+  keyCount: number;
   showAuxiliaryLines: boolean;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -166,58 +169,8 @@ const Boo = ({
             y: trendline.m * averageX + trendline.b,
           };
 
-          const keyWidth = 17 * ppm;
-          const keyHeight = keyWidth;
-          const gapY = 2 * ppm;
-          const originX = 0;
-          const originY = 0;
+          const group = drawKeyColumn(two, ppm, keyCount);
 
-          const homeRowKey = two.makeRectangle(
-            originX,
-            originY,
-            keyWidth,
-            keyHeight,
-          );
-          homeRowKey.stroke = 'black';
-          homeRowKey.linewidth = 2;
-          homeRowKey.fill = 'transparent';
-
-          const topRowKey = two.makeRectangle(
-            originX,
-            originY + gapY + keyHeight,
-            keyWidth,
-            keyHeight,
-          );
-          topRowKey.stroke = 'black';
-          topRowKey.linewidth = 2;
-          topRowKey.fill = 'transparent';
-
-          const bottomRowKey = two.makeRectangle(
-            originX,
-            originY - gapY - keyHeight,
-            keyWidth,
-            keyHeight,
-          );
-          bottomRowKey.stroke = 'black';
-          bottomRowKey.linewidth = 2;
-          bottomRowKey.fill = 'transparent';
-
-          // const columnOutline = two.makeRectangle(
-          //   originX,
-          //   originY,
-          //   keyWidth + gapY * 2,
-          //   keyHeight * 3 + gapY * 5,
-          // );
-          // columnOutline.stroke = 'black';
-          // columnOutline.linewidth = 2;
-          // columnOutline.fill = 'transparent';
-
-          const group = two.makeGroup([
-            bottomRowKey,
-            homeRowKey,
-            topRowKey,
-            // columnOutline,
-          ]);
           group.translation.set(midPoint.x, midPoint.y);
           group.rotation = Math.PI / 2 + Math.atan(trendline.m);
         }
@@ -228,7 +181,7 @@ const Boo = ({
         two.clear();
       };
     },
-    [data, ref.current, ppm, showAuxiliaryLines],
+    [data, ref.current, ppm, showAuxiliaryLines, keyCount],
   );
   return <div className="boo" ref={ref}></div>;
 };
@@ -389,6 +342,7 @@ export const App = ({ storedPpm }: { storedPpm: O.Option<number> }) => {
     O.getOrElse(() => DEFAULT_PX_PER_MM_VALUE),
   );
   const [ppm, setPpm] = useState(defaultPpm);
+  const [keyCount, setKeyCount] = useState(4);
 
   const onPpmChange = useCallback(
     (newPpm: number) => {
@@ -471,6 +425,19 @@ export const App = ({ storedPpm }: { storedPpm: O.Option<number> }) => {
               <span className="ml-2">Aux lines</span>
             </Button>
           </Label>
+          <Label className="mt-4">
+            <span>Key Count</span>
+            <Select
+              className="mt-1"
+              value={keyCount}
+              onChange={(e) => setKeyCount(parseInt(e.target.value))}
+            >
+              <option value={1}>1 Key</option>
+              <option value={2}>2 Keys</option>
+              <option value={3}>3 Keys</option>
+              <option value={4}>4 Keys</option>
+            </Select>
+          </Label>
           <Export onRawExport={onRawExport} state={exportState} />
         </div>
       </div>
@@ -478,6 +445,7 @@ export const App = ({ storedPpm }: { storedPpm: O.Option<number> }) => {
         <Boo
           data={positions}
           ppm={ppm}
+          keyCount={keyCount}
           showAuxiliaryLines={showAuxiliaryLines}
         />
       </div>
