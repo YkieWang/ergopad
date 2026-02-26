@@ -22,6 +22,7 @@
     "two.js": "^0.8.23"
   },
   "devDependencies": {
+    "@ijprest/kle-serial": "^0.15.1",
     "@snowpack/plugin-dotenv": "^2.1.0",
     "@snowpack/plugin-postcss": "^1.4.1",
     "@snowpack/plugin-react-refresh": "^2.5.0",

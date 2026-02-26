@@ -6,8 +6,7 @@ import React, {
   useCallback,
 } from 'react';
 import './App.css';
-import { leastSquares } from './leastSquares';
-import { drawKeyColumn } from './layout';
+import { calculateColumn, drawKeyColumn, LayoutMode } from './layout';
 import { PopupState, usePopupState, useTwo } from './hooks';
 import {
   Point2D,
@@ -40,6 +39,7 @@ import {
 import { SaveIcon } from '@heroicons/react/solid';
 import toast, { Toaster } from 'react-hot-toast';
 import { copy } from './copy';
+import { toKLE } from './converters/kle';
 
 type Column = 'pinky' | 'ring' | 'middle' | 'index' | 'index_far' | 'thumb';
 
@@ -104,11 +104,13 @@ const Boo = ({
   data,
   ppm,
   keyCount,
+  layoutMode,
   showAuxiliaryLines,
 }: {
   data: Record<Column, Pos[]>;
   ppm: number;
   keyCount: number;
+  layoutMode: LayoutMode;
   showAuxiliaryLines: boolean;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -126,21 +128,48 @@ const Boo = ({
           });
         }
         if (positions.length > 1) {
-          const trendline = leastSquares(positions, column !== 'thumb');
+          const geom = calculateColumn(
+            positions,
+            column === 'thumb',
+            ppm,
+            layoutMode,
+            keyCount,
+          );
+          if (!geom) return;
+
+          const { trendline, isVertical, midPoint, rotation, keys } = geom;
+
           if (showAuxiliaryLines) {
-            const line = two.makeLine(
-              0,
-              trendline.b,
-              el.clientWidth,
-              trendline.m * el.clientWidth + trendline.b,
-            );
+            let line;
+            if (isVertical) {
+              // Vertical line x = midPoint.x
+              line = two.makeLine(midPoint.x, 0, midPoint.x, el.clientHeight);
+            } else {
+              line = two.makeLine(
+                0,
+                trendline.b,
+                el.clientWidth,
+                trendline.m * el.clientWidth + trendline.b,
+              );
+            }
             line.stroke = fill;
             line.opacity = 0.5;
           }
 
-          const projections = positions.map(
-            projectPointToLine(slopeInterceptFormToStandardForm(trendline)),
-          );
+          // Re-calculate projections for dots only (logic duplication but purely visual)
+          // Or we could expose projections from calculateColumn if needed.
+          // But calculateColumn focuses on Column Geometry (Center, Rotation).
+          // Let's keep projection logic here for the 'red dots' visual.
+          // actually, let's just duplicate the projection logic strictly for visual debug
+          // since it's not affecting layout.
+          let projections: Point2D[];
+          if (isVertical) {
+            projections = positions.map((p) => ({ x: midPoint.x, y: p.y }));
+          } else {
+            projections = positions.map(
+              projectPointToLine(slopeInterceptFormToStandardForm(trendline)),
+            );
+          }
 
           if (showAuxiliaryLines) {
             projections.forEach((pos, i) => {
@@ -159,20 +188,10 @@ const Boo = ({
             });
           }
 
-          const xs = projections.map(({ x }) => x);
-
-          const minX = Math.min(...xs);
-          const averageX = (Math.max(...xs) - minX) / 2 + minX;
-
-          const midPoint: Point2D = {
-            x: averageX,
-            y: trendline.m * averageX + trendline.b,
-          };
-
-          const group = drawKeyColumn(two, ppm, keyCount);
+          const group = drawKeyColumn(two, ppm, keys);
 
           group.translation.set(midPoint.x, midPoint.y);
-          group.rotation = Math.PI / 2 + Math.atan(trendline.m);
+          group.rotation = rotation;
         }
       });
 
@@ -291,9 +310,11 @@ const PxPerMMControl = ({
 
 const Export = ({
   onRawExport,
+  onKLEExport,
   state,
 }: {
   onRawExport: () => void;
+  onKLEExport: () => void;
   state: PopupState;
 }) => {
   // https://github.com/estevanmaito/windmill-react-ui/issues/34
@@ -327,6 +348,9 @@ const Export = ({
         <DropdownItem onClick={onRawExport}>
           <span>Raw</span>
         </DropdownItem>
+        <DropdownItem onClick={onKLEExport}>
+          <span>KLE JSON</span>
+        </DropdownItem>
       </Dropdown>
     </div>
   );
@@ -343,6 +367,7 @@ export const App = ({ storedPpm }: { storedPpm: O.Option<number> }) => {
   );
   const [ppm, setPpm] = useState(defaultPpm);
   const [keyCount, setKeyCount] = useState(4);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('compact');
 
   const onPpmChange = useCallback(
     (newPpm: number) => {
@@ -365,6 +390,20 @@ export const App = ({ storedPpm }: { storedPpm: O.Option<number> }) => {
         exportState.close();
       });
   }, [positions, exportState.close]);
+
+  const onKLEExport = useCallback(() => {
+    const kleData = toKLE(positions, ppm, keyCount, layoutMode);
+    copy(JSON.stringify(kleData, null, 2))
+      .then(() => {
+        toast.success('Copied KLE JSON to clipboard');
+      })
+      .catch(() => {
+        toast.error('Something went wrong');
+      })
+      .finally(() => {
+        exportState.close();
+      });
+  }, [positions, ppm, keyCount, layoutMode, exportState.close]);
 
   useEffect(() => {
     function f(this: HTMLDivElement, evt: PointerEvent) {
@@ -438,7 +477,22 @@ export const App = ({ storedPpm }: { storedPpm: O.Option<number> }) => {
               <option value={4}>4 Keys</option>
             </Select>
           </Label>
-          <Export onRawExport={onRawExport} state={exportState} />
+          <Label className="mt-4">
+            <span>Mode</span>
+            <Select
+              className="mt-1"
+              value={layoutMode}
+              onChange={(e) => setLayoutMode(e.target.value as LayoutMode)}
+            >
+              <option value="compact">Compact</option>
+              <option value="loose">Loose</option>
+            </Select>
+          </Label>
+          <Export
+            onRawExport={onRawExport}
+            onKLEExport={onKLEExport}
+            state={exportState}
+          />
         </div>
       </div>
       <div className="touchytouchy" ref={ref}>
@@ -446,6 +500,7 @@ export const App = ({ storedPpm }: { storedPpm: O.Option<number> }) => {
           data={positions}
           ppm={ppm}
           keyCount={keyCount}
+          layoutMode={layoutMode}
           showAuxiliaryLines={showAuxiliaryLines}
         />
       </div>
