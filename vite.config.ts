@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // base: '/ergopad/', // Removed to allow root access in dev
+  base: './', // Use relative path for GitHub Pages deployment
   build: {
     outDir: 'build',
   },
